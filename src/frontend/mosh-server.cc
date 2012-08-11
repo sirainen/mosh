@@ -37,6 +37,7 @@
 #include <string.h>
 #include <termios.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/ioctl.h>
@@ -58,14 +59,6 @@
 #include <paths.h>
 #endif
 
-#include "completeterminal.h"
-#include "swrite.h"
-#include "user.h"
-#include "fatal_assert.h"
-#include "locale_utils.h"
-#include "select.h"
-#include "timestamp.h"
-
 #if HAVE_PTY_H
 #include <pty.h>
 #elif HAVE_UTIL_H
@@ -75,6 +68,15 @@
 #if FORKPTY_IN_LIBUTIL
 #include <libutil.h>
 #endif
+
+#include "completeterminal.h"
+#include "swrite.h"
+#include "user.h"
+#include "fatal_assert.h"
+#include "locale_utils.h"
+#include "pty_compat.h"
+#include "select.h"
+#include "timestamp.h"
 
 #ifndef _PATH_BSHELL
 #define _PATH_BSHELL "/bin/sh"
@@ -369,10 +371,6 @@ int run_server( const char *desired_ip, const char *desired_port,
     _exit( 0 );
   }
 
-  if ( setsid() < 0 ) {
-    perror( "setsid" );
-  }
-
   fprintf( stderr, "\nmosh-server (%s)\n", PACKAGE_STRING );
   fprintf( stderr, "Copyright 2012 Keith Winstein <mosh-devel@mit.edu>\n" );
   fprintf( stderr, "License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>.\nThis is free software: you are free to change and redistribute it.\nThere is NO WARRANTY, to the extent permitted by law.\n\n" );
@@ -394,18 +392,24 @@ int run_server( const char *desired_ip, const char *desired_port,
   /* close file descriptors */
   if ( !verbose ) {
     /* Necessary to properly detach on old versions of sshd (e.g. RHEL/CentOS 5.0). */
-    fclose( stdin );
-    fclose( stdout );
-    fclose( stderr );
+    int nullfd;
+
+    nullfd = open( "/dev/null", O_RDWR );
+    if ( nullfd == -1 ) {
+      perror( "dup2" );
+      exit( 1 );
+    }
+
+    if ( dup2 ( nullfd, STDIN_FILENO ) < 0 ||
+         dup2 ( nullfd, STDOUT_FILENO ) < 0 ||
+         dup2 ( nullfd, STDERR_FILENO ) < 0 ) {
+      perror( "dup2" );
+      exit( 1 );
+    }
   }
 
   char utmp_entry[ 64 ] = { 0 };
-
-#ifdef HAVE_UTEMPTER
-  /* make utmp entry */
   snprintf( utmp_entry, 64, "mosh [%d]", getpid() );
-  utempter_add_record( master, utmp_entry );
-#endif
 
   /* Fork child process */
   pid_t child = forkpty( &master, NULL, &child_termios, &window_size );
@@ -417,11 +421,6 @@ int run_server( const char *desired_ip, const char *desired_port,
 
   if ( child == 0 ) {
     /* child */
-
-    /* reopen stdio */
-    stdin = fdopen( STDIN_FILENO, "r" );
-    stdout = fdopen( STDOUT_FILENO, "w" );
-    stderr = fdopen( STDERR_FILENO, "w" );
 
     /* reenable signals */
     struct sigaction sa;
@@ -470,6 +469,11 @@ int run_server( const char *desired_ip, const char *desired_port,
     }
   } else {
     /* parent */
+
+#ifdef HAVE_UTEMPTER
+    /* make utmp entry */
+    utempter_add_record( master, utmp_entry );
+#endif
 
     try {
       serve( master, terminal, *network );

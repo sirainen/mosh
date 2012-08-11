@@ -30,25 +30,22 @@
     also delete it here.
 */
 
-#ifndef DOS_ASSERT_HPP
-#define DOS_ASSERT_HPP
+#ifndef PTY_COMPAT_HPP
+#define PTY_COMPAT_HPP
 
-#include <stdio.h>
-#include <stdlib.h>
+#include "config.h"
 
-#include "crypto.h"
+#ifndef HAVE_FORKPTY
+#  define forkpty my_forkpty
+#endif
+#ifndef HAVE_CFMAKERAW
+#  define cfmakeraw my_cfmakeraw
+#endif
 
-static void dos_detected( const char *expression, const char *file, int line, const char *function )
-{
-  char buffer[ 2048 ];
-  snprintf( buffer, 2048, "Illegal counterparty input (possible denial of service) in function %s at %s:%d, failed test: %s\n",
-	    function, file, line, expression );
-  throw Crypto::CryptoException( buffer );
-}
+pid_t my_forkpty( int *amaster, char *name,
+		  const struct termios *termp,
+		  const struct winsize *winp );
 
-#define dos_assert(expr)						\
-  ((expr)								\
-   ? (void)0								\
-   : dos_detected (#expr, __FILE__, __LINE__, __PRETTY_FUNCTION__ ))
+void my_cfmakeraw( struct termios *termios_p );
 
 #endif

@@ -172,6 +172,9 @@ AS_IF([test x"$with_utempter" != xno],
 
 AC_SEARCH_LIBS([compress], [z], , [AC_MSG_ERROR([Unable to find zlib.])])
 
+AC_SEARCH_LIBS([socket], [socket])
+AC_SEARCH_LIBS([inet_addr], [nsl])
+
 # Checks for header files.
 AC_CHECK_HEADERS([arpa/inet.h fcntl.h langinfo.h limits.h locale.h netinet/in.h stddef.h stdint.h inttypes.h stdlib.h string.h sys/ioctl.h sys/resource.h sys/socket.h sys/stat.h sys/time.h termios.h unistd.h wchar.h wctype.h], [], [AC_MSG_ERROR([Missing required header file.])])
 
@@ -195,7 +198,7 @@ AC_TYPE_UINTPTR_T
 # Checks for library functions.
 AC_FUNC_FORK
 AC_FUNC_MBRTOWC
-AC_CHECK_FUNCS([gettimeofday setrlimit inet_ntoa iswprint memchr memset nl_langinfo posix_memalign setenv setlocale sigaction socket strchr strdup strncasecmp strtok strerror strtol wcwidth])
+AC_CHECK_FUNCS([gettimeofday setrlimit inet_ntoa iswprint memchr memset nl_langinfo posix_memalign setenv setlocale sigaction socket strchr strdup strncasecmp strtok strerror strtol wcwidth cfmakeraw])
 
 AC_SEARCH_LIBS([clock_gettime], [rt], [AC_DEFINE([HAVE_CLOCK_GETTIME], [1], [Define if clock_gettime is available.])])
 
@@ -220,6 +223,12 @@ AC_CHECK_DECL([forkpty],
      [Define if libutil.h necessary for forkpty().])],
   , [[#include <sys/types.h>
   #include <libutil.h>]])
+
+AC_CHECK_LIB([util], [forkpty], [
+  AC_DEFINE([HAVE_FORKPTY],, [Define if you have forkpty().])
+  LIBUTIL="-lutil"
+  AC_SUBST([LIBUTIL])
+])
 
 AC_MSG_CHECKING([whether pipe2(..., O_CLOEXEC) is supported])
 AC_LINK_IFELSE([AC_LANG_PROGRAM([[#define _GNU_SOURCE
